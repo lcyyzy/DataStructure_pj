@@ -1,0 +1,644 @@
+﻿<!doctype html>
+<html lang = "en">
+<head>
+	<meta charset = "utf-8">
+	<title>
+		lcyyzymap
+	</title>
+	<script src = "http://codeforces.com/static/js/jquery-1.8.3.js"></script>
+	<script src="sweetalert.min.js"></script>
+	<link rel="stylesheet" type="text/css" href="dist/sweetalert.css">
+</head>
+
+<body>
+	<div>
+		<select id = "LcySelect">
+			<!--
+			<option value = 'shanghai_map.osm' selected>Shang Hai</option>
+			-->
+			<option value = 'hongkou.osm' selected>Hong Kou</option>
+			<option value = 'yangpu.osm'>Yang Pu</option>
+			<option value = 'putuo.osm'>Pu tuo</option>
+			<option value = 'zhabei.osm'>Zha Bei</option>
+			<option value = 'changning.osm'>Chang Ning</option>
+			<option value = 'huangpu.osm'>Huang Pu</option>
+			<option value = 'jingan.osm'>Jing An</option>
+			<option value = 'minhang.osm'>Min Hang</option>
+			<option value = 'xuhuibei.osm'>Xu Hui(North)</option>
+			<option value = 'xuhuinan.osm'>Xu Hui(South)</option>
+			<option value = 'yangpubei.osm'>Yang Pu(North)</option>
+			<option value = 'yangpunan.osm'>Yang Pu(South)</option>
+			<option value = 'fengxian.osm'>Feng Xian</option>
+			<option value = 'pdlujiazui.osm'>Pu Dong(Lu Jia Zui)</option>
+			<option value = 'pdgaoqiao.osm'>Pu Dong(Gao Qiao)</option>
+			<option value = 'pdzhangjiang.osm'>Pu Dong(Zhang Jiang)</option>
+			<option value = 'pdairport.osm'>Pu Dong Airport</option>
+			<option value = 'hongqiaoairport.osm'>Hong Qiao Airport</option>
+			<option value = 'renminguangchang.osm'>Re Min Square</option>
+		</select>
+		<select id = "LcyMethod">
+			<option value = 'FindPath' selected>Shortest Path</option>
+			<option value = 'RangeQuery'>Range Query</option>
+			<option value = 'NearbyQuery'>Neighbour Query</option>
+			<!--
+			<option value = 'TaxiQuery'>Taxi Query</option>
+			-->
+		 </select>
+		<button onclick = "click1()" value = "draw">draw</button>
+		Taxi Number:<input type = 'number' id = 'TaxiNumber'/>
+		<button onclick = "TaxiQuery()" value = "query">query</button>
+	</div>
+	<div>
+		from: lontitude <input id = "text1"/> latitude <input id = "text2"/> to: lontitude <input id = "text3"/> latitude <input id = "text4"/>
+	</div>
+	<div>
+		<canvas id = "myCanvas"/>
+	</div>
+
+	<script>
+
+	
+		function dealwithdata(data) {
+			//console.log(data);
+			
+			for (var i = 0; i < data.length; ++i) {	
+				y = (1 - (data[i].field5 - minlat) / (maxlat - minlat)) * 1 * scale;
+				x = ((data[i].field4 - minlon) / (maxlon - minlon)) * 1.3 * scale;
+				//console.log([x,y]);
+				ctx.fillStyle = "#00FF00";
+				ctx.beginPath();
+	 			ctx.arc(x, y, 3, 0, 2 * Math.PI, true);
+	 			ctx.closePath();
+				ctx.fill();
+			}
+			
+			ctx.beginPath();
+			for (var i = 0; i < data.length; ++i) {	
+				y = (1 - (data[i].field5 - minlat) / (maxlat - minlat)) * 1 * scale;
+				x = ((data[i].field4 - minlon) / (maxlon - minlon)) * 1.3 * scale;
+
+	 			if (i == 0) ctx.moveTo(x, y);
+	 			else ctx.lineTo(x, y);
+				
+			}
+			ctx.lineWidth = Math.max(scale * 9.5 / 10000, 0.95); // 设置线宽
+			ctx.strokeStyle = "#00FF00"; // 设置线的颜色
+			ctx.stroke(); // 进行线的着色，这时整条线才变得可见
+			ctx.closePath();
+		}
+
+		var TaxiQuery = function() {
+			var number =  document.getElementById('TaxiNumber').value;
+			if (number.length == 0) {
+				swal({
+					title : "Error!",
+					text : "Please input valid taxi number",
+					type : "error",
+					confirmButtonText : "Okay"
+				});
+				return;
+			}
+			//swal('select field4, field5 from taxi where field1 = ' + number);
+			
+			$.ajax({
+				url: 'http://localhost:3000/q/' + btoa('select field4, field5 from taxi where field1 = ' + number),
+				method: 'get',
+				success: function (data) {
+					dealwithdata(data);
+				}
+			})
+		}
+
+		
+		/*
+		$.ajax({
+			url: 'http://localhost:3000/q/' + btoa('select * from taxi where field1 = 2'),
+			method: 'get',
+			success: function (data) {
+				dealwithdata(data[0].field2);
+			}
+		})
+		*/
+
+		function PriorityQueue () {
+			this._nodes = [];
+			this._nodes.push({key: -1, priority: 1000});
+
+			this.enqueue = function (priority, key) {
+				this._nodes.push({key: key, priority: priority});
+				var son = this._nodes.length - 1, papa = Math.floor(son / 2);
+
+				while (son != 1 && this._nodes[papa].priority > this._nodes[son].priority) {
+					var temp = this._nodes[papa];
+					this._nodes[papa] = this._nodes[son];
+					this._nodes[son] = temp;
+					son = papa;
+					papa = Math.floor(son / 2);
+				}
+			}
+
+			this.dequeue = function () {
+				var answer = this._nodes[1];
+				this._nodes[1] = this._nodes[this._nodes.length - 1];
+				this._nodes.pop();
+				var papa = 1, son = 1, stop = false;
+
+				while (papa * 2 <= this._nodes.length - 1 && !stop) {
+					if (papa * 2 + 1 > this._nodes.length - 1 || this._nodes[papa * 2].priority < this._nodes[papa * 2 + 1].priority)
+						son = papa * 2;
+					else
+						son = papa * 2 + 1;
+					if ((this._nodes[papa]).priority > (this._nodes[son]).priority) {
+						var temp = this._nodes[papa];
+						this._nodes[papa] = this._nodes[son];
+						this._nodes[son] = temp;
+						papa = son;
+					}
+					else
+						stop = true;
+				}
+				return answer;
+			}
+			this.isEmpty = function () {
+				return (this._nodes.length == 1);
+			}
+		}
+		/*/ SQL Test Code
+		var connection = new ActiveXObject("ADODB.Connection") ;
+		var connectionstring="Data Source=<localhost>;Initial Catalog=<lcypj>;User ID=<root>;Password=lcyyzy>;Provider=SQLOLEDB";
+
+		connection.Open(connectionstring);
+		var rs = new ActiveXObject("ADODB.Recordset");
+
+		rs.Open("SELECT * FROM taxi WHERE field1 = 2", connection);
+		rs.MoveFirst
+		while(!rs.eof) {
+			alert(rs.fields(1));
+			rs.movenext;
+			break;
+		}
+
+		rs.close;
+		connection.close;
+
+		*/// End of SQL Test Code
+		
+		const scale = 1111;
+		var mark1 = new Image();
+		mark1.src = "mark1.png";
+		var mark2 = new Image();
+		mark2.src = "mark2.png";
+		var canvas = document.getElementById('myCanvas');
+		$("canvas").attr("width", scale * 1.3);
+		$("canvas").attr("height", scale);
+		var ctx = canvas.getContext('2d');
+		var lat = new Array(), lon = new Array();
+		var minlon, minlat, maxlon, maxlat, cnt;
+		var W = [], a = [], nodes = [], edges = [], mouselon = [], mouselat = [], coverby = [], Meaningful = [];
+		
+		$("#LcyMethod").change(function(){
+			cnt = 0;
+		});
+		
+		canvas.addEventListener("click", function(evt) {
+			var mousePos = getMousePos(canvas, evt);
+			if (document.getElementById('LcyMethod').value == 'FindPath') {
+				//if (cnt >= 2)
+					//return;
+				mouselon[cnt] = (mousePos.x / scale / 1.3 * (maxlon - minlon) - (-minlon));
+				mouselat[cnt] = ((1 - mousePos.y / scale) * (maxlat - minlat) - (-minlat));
+				++cnt;
+
+				if (cnt % 2 == 0) {
+					document.getElementById('text3').value = mouselon[cnt-1];
+					document.getElementById('text4').value = mouselat[cnt-1];
+					ctx.fillStyle = "#FFEB3B";
+
+					ctx.beginPath();
+					ctx.arc(mousePos.x, mousePos.y, 5, 0, 2 * Math.PI, true);
+					ctx.closePath();
+					ctx.fill();
+
+					var minn0 = null, minn1 = null;
+															
+					for (var i = 0; i < a.length; ++i) {
+						if (minn0 == null || ((mouselon[cnt-2] - lon[a[i]])*(mouselon[cnt-2] - lon[a[i]]) + (mouselat[cnt-2] - lat[a[i]])*(mouselat[cnt-2] - lat[a[i]]) < (mouselon[cnt-2] - lon[minn0])*(mouselon[cnt-2] - lon[minn0]) + (mouselat[cnt-2] - lat[minn0])*(mouselat[cnt-2] - lat[minn0])))
+							minn0 = a[i];
+					}
+															
+					for (var i = 0; i < a.length; ++i) {
+						if (minn1 == null || ((mouselon[cnt-1] - lon[a[i]])*(mouselon[cnt-1] - lon[a[i]]) + (mouselat[cnt-1] - lat[a[i]])*(mouselat[cnt-1] - lat[a[i]]) < (mouselon[cnt-1] - lon[minn1])*(mouselon[cnt-1] - lon[minn1]) + (mouselat[cnt-1] - lat[minn1])*(mouselat[cnt-1] - lat[minn1])))
+							minn1 = a[i];
+					}
+
+					ctx.beginPath();
+					y = (1 - (mouselat[cnt-2] - minlat) / (maxlat - minlat)) * 1 * scale;
+					x = ((mouselon[cnt-2] - minlon)/(maxlon-minlon)) * 1.3 * scale;
+					ctx.moveTo(x, y);
+															
+					y = (1 - (lat[minn0] - minlat) / (maxlat - minlat)) * 1 * scale;
+					x = ((lon[minn0] - minlon)/(maxlon-minlon)) * 1.3 * scale;
+					ctx.lineTo(x, y);
+																
+					y = (1 - (lat[minn1] - minlat) / (maxlat - minlat)) * 1 * scale;
+					x = ((lon[minn1] - minlon) / (maxlon-minlon)) * 1.3 * scale;
+					ctx.moveTo(x, y);
+																
+					y = (1 - (mouselat[cnt-1] - minlat) / (maxlat - minlat)) * 1 * scale;
+					x = ((mouselon[cnt-1] - minlon) / (maxlon - minlon)) * 1.3 * scale;
+	 				ctx.lineTo(x, y);
+						
+					var dist = [];
+					var INFINITY = 1/0;
+
+					for (var i = 0; i < a.length; ++i)
+						dist[a[i]] = INFINITY;
+					dist[minn0] = 0;
+
+					var lcyzynodes = new PriorityQueue();
+					lcyzynodes.enqueue(0, minn0);
+
+					last = [];
+
+					while (!lcyzynodes.isEmpty()) {
+						smallest = lcyzynodes.dequeue();
+						while (smallest != null && Math.abs(smallest.priority - dist[smallest.key]) > 1e-10)
+							smallest = lcyzynodes.dequeue();
+						if (smallest == null) break;
+						smallest = smallest.key;
+
+						var b = edges[smallest];
+
+						//alert(smallest);
+						if (b != null)
+							for (var i = 0; i < b.length; ++i) {
+								if (dist[smallest] + Math.sqrt(Math.pow((lat[smallest] - lat[b[i]])*10000, 2) + Math.pow((lon[smallest] - lon[b[i]])*10000, 2)) < dist[b[i]]) {
+									dist[b[i]] = dist[smallest] + Math.sqrt(Math.pow((lat[smallest] - lat[b[i]])*10000, 2) + Math.pow((lon[smallest] - lon[b[i]])*10000, 2));
+									lcyzynodes.enqueue(dist[b[i]], b[i]);
+									last[b[i]] = smallest;
+								}
+							}
+					}
+						
+					//alert("Calculation Finished");
+					if (dist[minn1] == INFINITY)
+						//alert("No such route!!!");
+						swal({
+							title : "Error!",
+							text : "No Such Route",
+							type : "error",
+							confirmButtonText : "Okay"
+						});
+						//Lcy's pangci dropped!!!
+					else {
+						swal({
+							title : "It worked!",
+							text : "Shortest Path found",
+							type : "success",
+							confirmButtonText : "Okay"
+						});
+						y = (1 - (lat[minn1] - minlat) / (maxlat - minlat)) * 1 * scale;
+						x = ((lon[minn1] - minlon) / (maxlon-minlon)) * 1.3 * scale;
+						ctx.moveTo(x, y);
+						var p = minn1;
+						while (p != minn0) {
+							y = (1 - (lat[last[p]] - minlat) / (maxlat - minlat)) * 1 * scale;
+							x = ((lon[last[p]] - minlon) / (maxlon-minlon)) * 1.3 * scale;
+							ctx.lineTo(x, y);
+							p = last[p];
+						}
+					}
+
+					ctx.lineWidth = Math.max(scale * 7 / 10000, 3); // 设置线宽
+					ctx.strokeStyle = "#942923"; // 设置线的颜色
+					ctx.stroke(); // 进行线的着色，这时整条线才变得可见
+				}
+				else {
+					document.getElementById('text1').value = mouselon[cnt-1];
+					document.getElementById('text2').value = mouselat[cnt-1];
+					ctx.fillStyle = "#FFEB3B";
+					ctx.beginPath();
+					ctx.arc(mousePos.x, mousePos.y, 5, 0, 2 * Math.PI, true);
+					ctx.closePath();
+					ctx.fill();
+				}
+			} else if (document.getElementById('LcyMethod').value == 'RangeQuery') {
+				mouselon[cnt] = (mousePos.x / scale / 1.3 * (maxlon - minlon) - (-minlon));
+				mouselat[cnt] = ((1 - mousePos.y / scale) * (maxlat - minlat) - (-minlat));
+				
+				var radius = 100, MarkSize = 20;
+				
+				ctx.strokeStyle = "#942923";
+				ctx.beginPath();
+				ctx.arc(mousePos.x, mousePos.y, 100, 0, 2 * Math.PI, true);
+				ctx.closePath();
+				ctx.stroke();
+				
+				
+				ctx.drawImage(mark1, mousePos.x - Math.floor(MarkSize/2), mousePos.y - MarkSize, MarkSize, MarkSize);
+				
+				RangeNodeList = [];
+				
+				for (var i = 0; i < a.length; ++i) {
+					if ((Math.pow(((lon[a[i]] - minlon) / (maxlon - minlon)) * 1.3 * scale - mousePos.x, 2)
+						+ Math.pow((1 - (lat[a[i]] - minlat) / (maxlat - minlat)) * 1 * scale - mousePos.y, 2)) <= 10000
+						&& Meaningful[a[i]]) {
+						RangeNodeList.push(a[i]);
+					}
+				}
+				
+				var answer = "";
+				
+				for (var i = 0; i < RangeNodeList.length; ++i) {
+					y = (1 - (lat[RangeNodeList[i]] - minlat) / (maxlat - minlat)) * 1 * scale;
+					x = ((lon[RangeNodeList[i]] - minlon) / (maxlon - minlon)) * 1.3 * scale;
+					ctx.drawImage(mark2, x - Math.floor(MarkSize/2), y - MarkSize, MarkSize, MarkSize);
+					answer += "lon : " + lon[RangeNodeList[i]] + "</br>lat : " + lat[RangeNodeList[i]] + "</br><span style=\"color:#F8BB86\">" + Meaningful[RangeNodeList[i]] + "</span></br>";
+				}
+				ctx.drawImage(mark1, mousePos.x - Math.floor(MarkSize/2), mousePos.y - MarkSize, MarkSize, MarkSize);
+				if (answer == "") answer = "<span style=\"color:#F08080\">No Result Found<span>";
+
+				swal({
+					title : "<big>Range Query Results<big>",
+					text : answer,
+					html : true
+				});
+			} else if (document.getElementById('LcyMethod').value == 'NearbyQuery') {
+				mouselon[cnt] = (mousePos.x / scale / 1.3 * (maxlon - minlon) - (-minlon));
+				mouselat[cnt] = ((1 - mousePos.y / scale) * (maxlat - minlat) - (-minlat));
+				
+				var MarkSize = 20;
+				
+				RangeNodeList = [];
+				
+				var MinDist = 1/0;
+				var Minn = null;
+				
+				for (var i = 0; i < a.length; ++i) {
+					if (((Math.pow(((lon[a[i]] - minlon) / (maxlon - minlon)) * 1.3 * scale - mousePos.x, 2)
+						+ Math.pow((1 - (lat[a[i]] - minlat) / (maxlat - minlat)) * 1 * scale - mousePos.y, 2)) < MinDist || Minn == null)
+						&& Meaningful[a[i]]) {
+						Minn = a[i];
+						MinDist = Math.pow(((lon[a[i]] - minlon) / (maxlon - minlon)) * 1.3 * scale - mousePos.x, 2)
+							+ Math.pow((1 - (lat[a[i]] - minlat) / (maxlat - minlat)) * 1 * scale - mousePos.y, 2);
+					}
+				}
+				
+				mouselon[cnt+1] = lon[Minn];
+				mouselat[cnt+1] = lat[Minn];
+				
+				y = (1 - (lat[Minn] - minlat) / (maxlat - minlat)) * 1 * scale;
+				x = ((lon[Minn] - minlon) / (maxlon - minlon)) * 1.3 * scale;
+				ctx.drawImage(mark2, x - Math.floor(MarkSize/2), y - MarkSize, MarkSize, MarkSize);
+				var answer = "lon : " + lon[Minn] + "</br>lat : " + lat[Minn] + "</br><span style=\"color:#F8BB86\">" + Meaningful[Minn] + "</span></br>";
+
+				swal({
+					title : "<big>Nearest Query Result<big>",
+					text : answer,
+					html : true
+				});
+				
+				// paint the path
+				
+				var minn0 = null, minn1 = null;
+				cnt = 2;
+															
+				for (var i = 0; i < a.length; ++i) {
+					if (minn0 == null || ((mouselon[cnt-2] - lon[a[i]])*(mouselon[cnt-2] - lon[a[i]]) + (mouselat[cnt-2] - lat[a[i]])*(mouselat[cnt-2] - lat[a[i]]) < (mouselon[cnt-2] - lon[minn0])*(mouselon[cnt-2] - lon[minn0]) + (mouselat[cnt-2] - lat[minn0])*(mouselat[cnt-2] - lat[minn0])))
+						minn0 = a[i];
+				}
+															
+				for (var i = 0; i < a.length; ++i) {
+					if (minn1 == null || ((mouselon[cnt-1] - lon[a[i]])*(mouselon[cnt-1] - lon[a[i]]) + (mouselat[cnt-1] - lat[a[i]])*(mouselat[cnt-1] - lat[a[i]]) < (mouselon[cnt-1] - lon[minn1])*(mouselon[cnt-1] - lon[minn1]) + (mouselat[cnt-1] - lat[minn1])*(mouselat[cnt-1] - lat[minn1])))
+						minn1 = a[i];
+				}
+
+				ctx.beginPath();
+				y = (1 - (mouselat[cnt-2] - minlat) / (maxlat - minlat)) * 1 * scale;
+				x = ((mouselon[cnt-2] - minlon)/(maxlon-minlon)) * 1.3 * scale;
+				ctx.moveTo(x, y);
+															
+				y = (1 - (lat[minn0] - minlat) / (maxlat - minlat)) * 1 * scale;
+				x = ((lon[minn0] - minlon)/(maxlon-minlon)) * 1.3 * scale;
+				ctx.lineTo(x, y);
+																
+				y = (1 - (lat[minn1] - minlat) / (maxlat - minlat)) * 1 * scale;
+				x = ((lon[minn1] - minlon) / (maxlon-minlon)) * 1.3 * scale;
+				ctx.moveTo(x, y);
+																
+				y = (1 - (mouselat[cnt-1] - minlat) / (maxlat - minlat)) * 1 * scale;
+				x = ((mouselon[cnt-1] - minlon) / (maxlon - minlon)) * 1.3 * scale;
+	 			ctx.lineTo(x, y);
+						
+				var dist = [];
+				var INFINITY = 1/0;
+
+				for (var i = 0; i < a.length; ++i)
+					dist[a[i]] = INFINITY;
+				dist[minn0] = 0;
+
+				var lcyzynodes = new PriorityQueue();
+				lcyzynodes.enqueue(0, minn0);
+
+				last = [];
+
+				while (!lcyzynodes.isEmpty()) {
+					smallest = lcyzynodes.dequeue();
+					while (smallest != null && Math.abs(smallest.priority - dist[smallest.key]) > 1e-10)
+						smallest = lcyzynodes.dequeue();
+					if (smallest == null) break;
+					smallest = smallest.key;
+
+					var b = edges[smallest];
+
+					//alert(smallest);
+					if (b != null)
+						for (var i = 0; i < b.length; ++i) {
+							if (dist[smallest] + Math.sqrt(Math.pow((lat[smallest] - lat[b[i]])*10000, 2) + Math.pow((lon[smallest] - lon[b[i]])*10000, 2)) < dist[b[i]]) {
+								dist[b[i]] = dist[smallest] + Math.sqrt(Math.pow((lat[smallest] - lat[b[i]])*10000, 2) + Math.pow((lon[smallest] - lon[b[i]])*10000, 2));
+								lcyzynodes.enqueue(dist[b[i]], b[i]);
+								last[b[i]] = smallest;
+							}
+						}
+				}
+						
+				//alert("Calculation Finished");
+				if (dist[minn1] == INFINITY) {
+					//alert("No such route!!!");
+					swal({
+						title : "Error!",
+						text : "No Such Route",
+						type : "error",
+						confirmButtonText : "Okay"
+					});
+					//Lcy's pangci dropped!!!
+				} else {
+					/*swal({
+						title : "It worked!",
+						text : "Shortest Path found",
+						type : "success",
+						confirmButtonText : "Okay"
+					});*/
+					y = (1 - (lat[minn1] - minlat) / (maxlat - minlat)) * 1 * scale;
+					x = ((lon[minn1] - minlon) / (maxlon-minlon)) * 1.3 * scale;
+					ctx.moveTo(x, y);
+					var p = minn1;
+					while (p != minn0) {
+						y = (1 - (lat[last[p]] - minlat) / (maxlat - minlat)) * 1 * scale;
+						x = ((lon[last[p]] - minlon) / (maxlon-minlon)) * 1.3 * scale;
+						ctx.lineTo(x, y);
+						p = last[p];
+					}
+				}
+
+				ctx.lineWidth = Math.max(scale * 7 / 10000, 3); // 设置线宽
+				ctx.strokeStyle = "#942923"; // 设置线的颜色
+				ctx.stroke(); // 进行线的着色，这时整条线才变得可见
+				
+				cnt = 0;
+				ctx.drawImage(mark1, mousePos.x - Math.floor(MarkSize/2), mousePos.y - MarkSize, MarkSize, MarkSize);
+				
+			}
+		});
+
+		function getMousePos(canvas, evt) {
+			var rect = canvas.getBoundingClientRect();
+			return {
+				x: evt.clientX - rect.left,
+				y: evt.clientY - rect.top
+			};
+		}
+
+		var click1 = function() {
+			ctx.fillStyle = '#FFFFF3';
+			ctx.fillRect(0,0,scale * 1.3, scale);
+			cnt = 0;
+			var choice = document.getElementById('LcySelect').value;
+			$.get(choice, function(xml) {
+				$(xml).find('bounds').each(function(idx0, bounds) {
+					maxlon = $(bounds).attr("maxlon");
+					minlon = $(bounds).attr("minlon");
+					maxlat = $(bounds).attr("maxlat");
+					minlat = $(bounds).attr("minlat");
+				});
+				
+				Meaningful = [];
+
+				$(xml).find('node').each(function(idx0,node) {
+					lat[node.id] = $(node).attr("lat");
+					lon[node.id] = $(node).attr("lon");
+					
+					for (var i = 0; i < node.children.length; ++i) {
+						if ($(node.children[i]).attr("k") == "name") Meaningful[node.id] = $(node.children[i]).attr("v");
+					}
+				});
+
+				edges = [];
+				nodes = [];
+				
+				$(xml).find('way').each(function(idx1, way) {
+					var flag = false;
+					for (var i = 0; i < way.children.length; ++i) {
+						if (way.children[i].localName == "tag" && $(way.children[i]).attr("k") == "highway") {
+							flag = true;
+							break;
+						}
+					}
+					if (flag) {
+						var last = null;
+						for (var i = 0; i < way.children.length; ++i) {
+							if (way.children[i].localName == "nd") {
+								nodes.push($(way.children[i]).attr("ref"));
+								var current = $(way.children[i]).attr("ref");
+								if (last != null) {
+									if (edges[current] == null)
+										edges[current] = [];
+									if (edges[last] == null)
+										edges[last] = [];
+									edges[last].push(current);
+									edges[current].push (last);
+								}
+								last = current;
+							}
+						}
+					}
+				});
+		
+				a = nodes.filter(function(item, pos) {
+					return nodes.indexOf(item) == pos;
+				})
+						
+				$(xml).find('way').each(function(idx0,way) {
+					ctx.beginPath(); // 开始路径绘制
+					var flag = false;
+					for (var i = 0; i < way.children.length; ++i) {
+						if (way.children[i].localName == "nd") {
+							var y = (1 - (lat[$(way.children[i]).attr("ref")] - minlat) / (maxlat - minlat)) * 1 * scale;
+							var x = ((lon[$(way.children[i]).attr("ref")] - minlon) / (maxlon - minlon)) * 1.3 * scale;
+							if (!flag)
+								ctx.moveTo(x, y);
+							else
+								ctx.lineTo(x, y);
+							flag = true;
+							if (coverby[$(way.children[i]).attr("ref")] == null)
+								coverby[$(way.children[i]).attr("ref")] = [$(way).attr("id")];
+							else
+								coverby[$(way.children[i]).attr("ref")].push($(way).attr("id"));
+						}
+					}
+					ctx.lineWidth = Math.max(scale * 7.5 / 10000, 0.75); // 设置线宽
+					ctx.strokeStyle = "#FFCCCC"; // 设置线的颜色
+					ctx.stroke(); // 进行线的着色，这时整条线才变得可见
+				});
+
+				$(xml).find('way').each(function(idx0,way) {
+					ctx.beginPath(); // 开始路径绘制
+					var flag = false;
+					var tmp = [], j = 0;
+					for (var i = 0; i < way.children.length; ++i) {
+						if (way.children[i].localName == "nd") {
+							tmp[++j] = $(way.children[i]).attr("ref");
+							var y = (1 - (lat[$(way.children[i]).attr("ref")] - minlat) / (maxlat - minlat)) * 1 *scale;
+							var x = ((lon[$(way.children[i]).attr("ref")] - minlon) / (maxlon - minlon)) * 1.3 * scale;
+							if (!flag)
+								ctx.moveTo(x, y);
+							else
+								ctx.lineTo(x, y);
+							flag = true;
+						}
+					}
+					W[way.id] = tmp;
+					ctx.lineWidth = Math.max(scale * 7/10000, 0.7); // 设置线宽
+					ctx.strokeStyle = "#FF6666"; // 设置线的颜色
+					ctx.stroke(); // 进行线的着色，这时整条线才变得可见
+				});
+
+				$(xml).find('relation').each(function(idx1, rel) {
+					for (var t = 0; t < rel.children.length; t++) {
+						if ($(rel.children[t]).attr("type") == "way") {
+							way = $(rel.children[t]).attr("ref");
+							if (!W[way])
+								continue;
+							ctx.beginPath(); // 开始路径绘制
+							var flag = false;
+							for (var i = 0; i < W[way].length; ++i) {
+								var y = (1 - (lat[W[way][i]] - minlat) / (maxlat - minlat)) * 1 * scale;
+								var x = ((lon[W[way][i]] - minlon) / (maxlon - minlon)) * 1.3 * scale;
+								if (!flag)
+									ctx.moveTo(x, y);
+								else
+									ctx.lineTo(x, y);
+								flag = true;
+							}
+							ctx.lineWidth = Math.max(scale * 3 / 10000, 0.3); // 设置线宽
+							ctx.strokeStyle = "#666699"; // 设置线的颜色
+							ctx.stroke(); // 进行线的着色，这时整条线才变得可见
+						}
+					}
+				});
+			});
+		}
+				
+		</script>
+	</body>
+</html>

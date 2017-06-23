@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang = "en">
+<head>
+	<meta charset = "utf-8">
+	<title> SQL Test </title>
+</head>
+<body>
+	<div>
+	<script type="text/javascript">
+		var connection = new ActiveXObject("ADODB.Connection") ;
+		var connectionstring="Data Source=<localhost>;Initial Catalog=<lcypj>;User ID=<root>;Password=lcyyzy>;Provider=SQLOLEDB";
+
+		connection.Open(connectionstring);
+		var rs = new ActiveXObject("ADODB.Recordset");
+
+		rs.Open("SELECT * FROM taxi WHERE field1 = 2", connection);
+		rs.MoveFirst
+		while(!rs.eof) {
+			alert(rs.fields(1));
+			rs.movenext;
+			break;
+		}
+
+		rs.close;
+		connection.close;
+	</script>
+	</div>
+</body>
+</html>
